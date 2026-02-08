@@ -48,3 +48,6 @@ class DoctorCRUD(OPDCRUD):
         self.db_session.delete(doctor)
         self.db_session.commit()
         return True
+
+    def get_all_doctors(self) -> list[Doctor]:
+        return self.db_session.query(Doctor).all()

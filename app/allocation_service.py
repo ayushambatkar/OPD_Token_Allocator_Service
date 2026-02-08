@@ -4,7 +4,7 @@ from app.crud.doctor import DoctorCRUD
 from app.crud.slot import SlotCRUD
 from app.crud.token import TokenCRUD
 from app.models import TokenCreate, TokenSource, TokenStatus
-from app.schemas import Slot, Token
+from app.schemas import Doctor, Slot, Token
 from app.settings import settings
 
 
@@ -237,3 +237,19 @@ class AllocationService:
             ):
                 result.append(slot)
         return result
+
+    def get_all_slots_for_date(self, date_str: Optional[str]) -> List[Slot]:
+            """Get all slots, optionally filtered by date."""
+            if date_str:
+                try:
+                    request_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                except ValueError:
+                    raise Exception("Invalid date format. Use YYYY-MM-DD.")
+                return self.slot_crud.get_slots_by_date(request_date)
+            else:
+                return self.slot_crud.get_all_slots()
+    
+    def get_all_doctors(self) -> List[Doctor]:
+        """Get all doctors."""
+        return self.doctor_crud.get_all_doctors()
+        

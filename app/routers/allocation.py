@@ -7,6 +7,7 @@ from app.crud.doctor import DoctorCRUD
 from app.crud.slot import SlotCRUD
 from app.crud.token import TokenCRUD
 from app.models import SlotResponse, TokenCreate, TokenResponse
+from app.schemas import Doctor
 
 router = APIRouter(prefix="/allocation", tags=["allocation"])
 
@@ -16,6 +17,7 @@ def get_allocation_service(db_session: Session = Depends(db.get_db)):
     SlotCRUD.set_db_session(db_session)
     TokenCRUD.set_db_session(db_session)
     return AllocationService(DoctorCRUD(), SlotCRUD(), TokenCRUD())
+
 
 @router.post("/tokens", response_model=TokenResponse)
 async def allocate_token(
@@ -68,6 +70,7 @@ async def get_waiting_list(
     tokens = service.get_waiting_list(doctor_id)
     return [TokenResponse.model_validate(t) for t in tokens]
 
+
 @router.get("/slots/{doctor_id}", response_model=List[SlotResponse])
 async def get_slots_for_doctor(
     doctor_id: str, service: AllocationService = Depends(get_allocation_service)
@@ -75,3 +78,20 @@ async def get_slots_for_doctor(
     """Get slots for a doctor."""
     slots = service.get_slots_for_doctor(doctor_id)
     return [SlotResponse.model_validate(s) for s in slots]
+
+
+@router.get("/slots", response_model=List[SlotResponse])
+async def get_all_slots_for_date(
+    date: str = None, service: AllocationService = Depends(get_allocation_service)
+):
+    """Get all slots, optionally filtered by date."""
+    slots = service.get_all_slots_for_date(date)
+    return [SlotResponse.model_validate(s) for s in slots]
+
+@router.get("/doctors", response_model=List[Doctor])
+async def get_all_doctors(
+    service: AllocationService = Depends(get_allocation_service),
+):
+    """Get all doctors."""
+    doctors = service.get_all_doctors()
+    return [Doctor.model_validate(d) for d in doctors]

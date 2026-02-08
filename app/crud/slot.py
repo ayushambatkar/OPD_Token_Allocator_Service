@@ -1,5 +1,6 @@
 from datetime import date
 from typing import List, Optional
+from sqlalchemy import Date, cast
 from sqlalchemy.orm import Session
 from app.crud.main import OPDCRUD
 from app.models import SlotCreate
@@ -67,3 +68,11 @@ class SlotCRUD(OPDCRUD):
             self.db_session.commit()
             return True
         return False
+    def get_slots_by_date(self, request_date: date) -> List[Slot]:
+        """Get all slots for a specific date."""
+        return (
+            self.db_session.query(Slot)
+            .filter(cast(Slot.date, Date) == request_date)
+            .order_by(Slot.start_time)
+            .all()
+        )
