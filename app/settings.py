@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     no_show_timeout_minutes: int = 15
     allow_preemption: bool = True
     max_emergency_overflow: int = 2
+    version: str = "1.0.0"
 
     class Config:
         env_file = ".env"

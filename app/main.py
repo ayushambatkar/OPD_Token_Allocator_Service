@@ -1,8 +1,8 @@
 import fastapi
-from app import schemas  # noqa: F401 to ensure models are registered
+from app import schemas, settings  # noqa: F401 to ensure models are registered
 from app.routers import allocation
 
-server = fastapi.FastAPI()
+server = fastapi.FastAPI(version=settings.settings.version)
 
 server.include_router(allocation.router)
 
