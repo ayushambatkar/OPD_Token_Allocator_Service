@@ -17,63 +17,82 @@ class AllocationService:
         self.token_crud = token_crud
 
     def allocate_token(self, token_request: TokenCreate) -> Token:
-        """Allocate a token to a slot or put in waiting list."""
-        # Extract date from token request
+        now = datetime.now(UTC)
+
+        # normalize date
         request_date = (
             token_request.date.date()
             if isinstance(token_request.date, datetime)
             else token_request.date
         )
 
-        # Find available slot for the doctor on the specified date
-        slots = self.slot_crud.get_slots_for_doctor_by_date(
-            str(token_request.doctor_id), request_date
-        )
-        now = datetime.now(UTC)
+        with self.db.begin():
 
-        available_slot_id = None
+            # ---------- CASE 1: explicit slot ----------
+            if token_request.slot_id:
 
-        if not token_request.slot_id:
-            # Find the earliest slot that has capacity for the requested date
+                slot = self.slot_crud.get_slot_with_lock(token_request.slot_id)
+                if not slot:
+                    raise Exception("Slot not found")
+
+                if slot.date != request_date:
+                    raise Exception("Slot date mismatch")
+
+                if request_date == now.date() and slot.start_time <= now.time():
+                    raise Exception("Slot already started")
+
+                active_count = self.token_crud.count_active_tokens(slot.id)
+
+                max_capacity = slot.capacity
+                if token_request.source == TokenSource.emergency:
+                    max_capacity += settings.max_emergency_overflow
+
+                if active_count >= max_capacity:
+                    raise Exception("Slot full")
+
+                token = Token(
+                    doctor_id=token_request.doctor_id,
+                    slot_id=slot.id,
+                    source=token_request.source,
+                    priority=self._priority(token_request.source),
+                    status=TokenStatus.active,
+                )
+
+                self.db.add(token)
+                return token
+
+            # ---------- CASE 2: auto-assign nearest slot ----------
+            slots = self.slot_crud.get_slots_for_doctor_by_date(
+                token_request.doctor_id,
+                request_date,
+            )
+
             for slot in slots:
-                # Check if slot is in the future (for today's date) or any slot for future dates
-                if request_date > now.date() or slot.start_time > now.time():
-                    # Lock the slot and re-check capacity atomically
-                    locked_slot = self.slot_crud.get_slot_with_lock(slot.id)
-                    if locked_slot:
-                        active_tokens = self.token_crud.get_tokens_for_slot(
-                            locked_slot.id
-                        )
-                        max_capacity = locked_slot.capacity
-                        if token_request.source == TokenSource.emergency:
-                            max_capacity += settings.max_emergency_overflow
+                if request_date == now.date() and slot.start_time <= now.time():
+                    continue
 
-                        if len(active_tokens) < max_capacity:
-                            available_slot_id = locked_slot.id
-                            break
-        else:
-            # Specific slot requested - verify it matches the requested date
-            locked_slot = self.slot_crud.get_slot_with_lock(str(token_request.slot_id))
-            if locked_slot and locked_slot.date == request_date:
-                active_tokens = self.token_crud.get_tokens_for_slot(locked_slot.id)
+                locked_slot = self.slot_crud.get_slot_with_lock(slot.id)
+
+                active_count = self.token_crud.count_active_tokens(locked_slot.id)
+
                 max_capacity = locked_slot.capacity
                 if token_request.source == TokenSource.emergency:
                     max_capacity += settings.max_emergency_overflow
 
-                if len(active_tokens) < max_capacity:
-                    available_slot_id = locked_slot.id
+                if active_count < max_capacity:
+                    token = Token(
+                        doctor_id=token_request.doctor_id,
+                        slot_id=locked_slot.id,
+                        source=token_request.source,
+                        priority=self._priority(token_request.source),
+                        status=TokenStatus.active,
+                    )
 
-        if available_slot_id:
-            # Create token and assign slot atomically within the same transaction
-            token = self.token_crud.create_token(token_request)
-            self.token_crud.assign_slot_to_token(token.id, available_slot_id)
-            return self.token_crud.get_token(token.id)
-        else:
-            # Put in waiting list
-            token = self.token_crud.create_token(token_request)
-            token.status = TokenStatus.waiting
-            self.token_crud.db_session.commit()
-            return token
+                    self.db.add(token)
+                    return token
+
+            # ---------- NO SLOT AVAILABLE ----------
+            raise Exception("No available slot")
 
     def cancel_token(self, token_id: str) -> bool:
         """Cancel a token and reallocate if possible."""
