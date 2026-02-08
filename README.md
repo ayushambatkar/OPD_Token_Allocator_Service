@@ -4,6 +4,9 @@
 
 This is a token allocation system for hospital Outpatient Department (OPD) that supports elastic capacity management. It dynamically allocates tokens to doctor slots based on availability, priority, and real-world constraints.
 
+### Important
+The system enforces strict priority preemption: higher-priority tokens can displace lower-priority ones when slots are full, and displaced tokens are later reallocated based on priority.
+
 ## Features
 
 - **Multi-source token generation**: Online booking, walk-in, paid priority, follow-up, and emergency patients
